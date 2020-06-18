@@ -109,7 +109,8 @@ if __name__=='__main__':
     convert = False
 
     titles_file = open('titles.txt','r')
-    titles = [x.replace('\n','') for x in titles_file.readlines() if x[0]!='-']
+    titles_full = [x.replace('\n','') for x in titles_file.readlines()]
+    titles =  [x for x in titles_list if x[0]!='-']
 
     i = len(titles)
 
