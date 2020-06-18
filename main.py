@@ -100,7 +100,7 @@ def download_music(link,filename,download_path,max_download_attempts=5,convert_t
         separate_audio(os.path.join(download_path,filename+'.mp4'),os.path.join(download_path,filename+'.mp3')) # converting using ffmpeg
 
         if os.path.exists(os.path.join(download_path,filename+'.mp3')):
-            
+
             os.remove(os.path.join(download_path,filename+'.mp4'))
             print('Done Converting')
 
@@ -144,20 +144,25 @@ if __name__=='__main__':
     titles_full = [x.replace('\n','') for x in titles_file.readlines()]
     titles =  [x for x in titles_full if x[0]!='-']
 
-    i = len(titles)
+    i = 0
 
-    for search_request in titles:
-
-        if search_request[0] == '-':
-            continue
+    for search_request in titles:   # Getting links
         
-        print(search_request,'...',sep='')
+        print(i,'/',len(titles),' - Choosing YouTube link for ',search_request,'...',sep='')
         link,name = get_yt_link(search_request)
-        download_music(link,search_request.replace(' ','_'),download_path,convert_to_mp3=convert,rename=rename)
-        i-=1
-        print('-'*50,i,'remaining')
+        i += 1
+    
+    print()
 
-    titles_file.close()
+    i = 0
+
+    for search_request in titles:   # Downloading files
+
+        print(i,'/',len(titles),' - Downloading Audio ',search_request,'...',sep='')
+        download_music(link,search_request.replace(' ','_'),download_path,convert_to_mp3=convert,rename=rename)
+        i += 1
+
+    titles_file.close()                     # Updating titles.txt diabling downloaded music
     titles_file = open('titles.txt','w')
     for title in titles_full:
         titles_file.write(('-' + title if title[0] != '-' else title)+'\n')
