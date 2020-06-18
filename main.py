@@ -109,7 +109,9 @@ if __name__=='__main__':
     convert = False
 
     titles_file = open('titles.txt','r')
-    titles = [x.replace('\n','') for x in titles_file.readlines()]
+    titles = [x.replace('\n','') for x in titles_file.readlines() if x[0]!='-']
+
+    i = len(titles)
 
     for search_request in titles:
 
@@ -118,5 +120,6 @@ if __name__=='__main__':
         
         print(search_request,'...',sep='')
         download_music(search_request,download_path,nvids=2)
-        print('-'*50)
+        i-=1
+        print('-'*50,i,'remaining')
         
