@@ -129,6 +129,7 @@ def download_music(link,filename,download_path,max_download_attempts=5,convert_t
 if __name__=='__main__':
     
     vids=[]
+    spec_symb = ' -> ' # name - link separator for titles.txt
 
     download_path = os.path.join(os.path.curdir,'Music')
     print('Will be downloaded to',download_path)
@@ -139,32 +140,64 @@ if __name__=='__main__':
 
     convert = True
     rename = True
+    chooseAgain = False
 
     titles_file = open('titles.txt','r')
     titles_full = [x.replace('\n','') for x in titles_file.readlines()]
     titles =  [x for x in titles_full if x[0]!='-']
+    links = []
+    titles_new = []
 
-    i = 0
+    i = 1
 
-    for search_request in titles:   # Getting links
-        
-        print(i,'/',len(titles),' - Choosing YouTube link for ',search_request,'...',sep='')
-        link,name = get_yt_link(search_request)
-        i += 1
     
+    # -----------------------------------Getting links---------------------------------
+    for search_request in titles_full:   
+
+        if search_request[0] == '-':    # Skipping disabled titles
+            titles_new.append(search_request)
+            continue
+
+        print(i,'/',len(titles),' - Choosing YouTube link for ',search_request.split(spec_symb),'...',sep='')
+
+        if search_request.count(spec_symb)==1 and not chooseAgain:   # Skipping search where link is available
+            title,link = search_request.split(spec_symb)
+            print('Link already exists')
+        else:
+            title = search_request
+            link,name = get_yt_link(search_request)
+
+        links.append(link)    # List used for saving info to titles.txt
+        titles_new.append(title + spec_symb + link)
+        
+        i += 1
+
+    # ------------------------Updating titles.txt: adding links--------------------------
+    titles_file.close()                     
+    titles_file = open('titles.txt','w')
+
+    for title in titles_new:
+        titles_file.write(title + '\n')
+
+    titles_file.close()
+
+
     print()
 
-    i = 0
+    i = 1
+    # ---------------------------------Downloading files-----------------------------------
+    for search_request,link in zip(titles,links):   
 
-    for search_request in titles:   # Downloading files
-
-        print(i,'/',len(titles),' - Downloading Audio ',search_request,'...',sep='')
-        download_music(link,search_request.replace(' ','_'),download_path,convert_to_mp3=convert,rename=rename)
+        filename_base = search_request.split(spec_symb)[0]
+        print(i,'/',len(titles),' - Downloading Audio ',filename_base,'...',sep='')
+        download_music(link,filename_base.replace(' ','_'),download_path,convert_to_mp3=convert,rename=rename)
         i += 1
 
-    titles_file.close()                     # Updating titles.txt diabling downloaded music
-    titles_file = open('titles.txt','w')
-    for title in titles_full:
+    # ------------------------Updating titles.txt disabling downloaded music---------------
+    titles_file = open('titles.txt','w')    
+
+    for title in titles_new:
+
         titles_file.write(('-' + title if title[0] != '-' else title)+'\n')
         
         
