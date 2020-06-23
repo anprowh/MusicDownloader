@@ -11,6 +11,7 @@ patch.apply_patches()
 def get_yt_link(search_request,nvids=1,max_zero_results=10,verbose=1):
 
     base_search = 'https://www.youtube.com/results?search_query='
+    args_search = '&sp=EgIQAQ%253D%253D'
     base = 'https://www.youtube.com'
 
     vids = []
@@ -23,7 +24,7 @@ def get_yt_link(search_request,nvids=1,max_zero_results=10,verbose=1):
 
     while len(vids)==0:
 
-        search = requests.get(base_search+search_request.replace(' ','+')).text                # getting search results
+        search = requests.get(base_search+search_request.replace(' ','+')+args_search).text                # getting search results
         soup = BeautifulSoup(search,features='html.parser').findAll('a')
 
         vids = []
@@ -67,7 +68,7 @@ def download_music(link,filename,download_path,max_download_attempts=5,convert_t
     done = False
 
     if verbose:
-        print('Downloading',filename)
+        print('Downloading ',filename,'...',sep='')
 
     for j in range(max_download_attempts):
 
@@ -94,7 +95,7 @@ def download_music(link,filename,download_path,max_download_attempts=5,convert_t
     if convert_to_mp3:
 
         if verbose:
-            print('Converting')
+            print('Converting...')
 
         
         separate_audio(os.path.join(download_path,filename+'.mp4'),os.path.join(download_path,filename+'.mp3')) # converting using ffmpeg
@@ -117,6 +118,17 @@ def download_music(link,filename,download_path,max_download_attempts=5,convert_t
 
     if rename and not convert_to_mp3:
 
+        if verbose:
+            print('Renaming...')
+
+        if os.path.exists(os.path.join(download_path,filename+'.mp3')):
+
+            # If there already is file with this name then delete it
+            if verbose == 2:
+                print('Deleting existing file for renaming...')
+
+            os.remove(os.path.join(download_path,filename+'.mp3'))
+
         os.rename(os.path.join(download_path,filename+'.mp4'),os.path.join(download_path,filename+'.mp3'))
 
 
@@ -128,51 +140,74 @@ def download_music(link,filename,download_path,max_download_attempts=5,convert_t
     
 if __name__=='__main__':
     
-    vids=[]
     spec_symb = ' -> ' # name - link separator for titles.txt
 
-    download_path = os.path.join(os.path.curdir,'Music')
+    download_path = os.path.join(os.path.abspath(os.path.curdir),'Music')
     print('Will be downloaded to',download_path)
 
-    nvids=5
-    max_zero_results = 10
+    nvids = 1     # Number of videos to choose from
+    max_zero_results = 10   # Max number of searching tries
     max_download_attempts = 5
 
-    convert = True
-    rename = True
-    chooseAgain = False
+    convert = False     # Converting using ffmpeg
+    rename = True   # File is originally downloaded with .mp4 extension. Setting to true leads to renameing .mp4 to .mp3
+    chooseAgain = False     # If there is link in titles.txt and it is set to False then no search will be done
 
     titles_file = open('titles.txt','r')
     titles_full = [x.replace('\n','') for x in titles_file.readlines()]
     titles =  [x for x in titles_full if x[0]!='-']
     links = []
-    titles_new = []
+    titles_new = []     # List used for saving info to titles.txt
+    disable_found = []  
+    disable_downloaded = [] # Disable title if search and downloading is successful
 
     i = 1
 
     
-    # -----------------------------------Getting links---------------------------------
-    for search_request in titles_full:   
+    # -----------------------------------Getting links--------------------------------- #
+    for search_request in titles_full:
 
-        if search_request[0] == '-':    # Skipping disabled titles
+        # Skipping disabled titles
+        if search_request[0] == '-':    
             titles_new.append(search_request)
+            disable_found.append(True)
             continue
 
         print(i,'/',len(titles),' - Choosing YouTube link for ',search_request.split(spec_symb),'...',sep='')
 
         if search_request.count(spec_symb)==1 and not chooseAgain:   # Skipping search where link is available
-            title,link = search_request.split(spec_symb)
-            print('Link already exists')
-        else:
-            title = search_request
-            link,name = get_yt_link(search_request)
 
-        links.append(link)    # List used for saving info to titles.txt
-        titles_new.append(title + spec_symb + link)
+            title,link = search_request.split(spec_symb)
+
+            print('Link already exists')
+            
+            disable_found.append(True)
+
+        else:
+
+            title = search_request
+            try:
+                link,name = get_yt_link(search_request)
+
+                disable_found.append(True)
+
+            except:
+                
+                print('Search Failed')
+                link,name = None, search_request
+                disable_found.append(False)
+  
+        if disable_found[-1]:
+            links.append(link)  
+            titles_new.append(title + spec_symb + link)
+        
+        else:
+            links.append(None)
+            titles_new.append(title)
         
         i += 1
 
-    # ------------------------Updating titles.txt: adding links--------------------------
+    # ------------------------Updating titles.txt: adding links-------------------------- #
     titles_file.close()                     
     titles_file = open('titles.txt','w')
 
@@ -185,19 +220,36 @@ if __name__=='__main__':
     print()
 
     i = 1
-    # ---------------------------------Downloading files-----------------------------------
+    # ---------------------------------Downloading files----------------------------------- #
     for search_request,link in zip(titles,links):   
+        if not link is None:
 
-        filename_base = search_request.split(spec_symb)[0]
-        print(i,'/',len(titles),' - Downloading Audio ',filename_base,'...',sep='')
-        download_music(link,filename_base.replace(' ','_'),download_path,convert_to_mp3=convert,rename=rename)
+            try:
+
+                filename_base = search_request.split(spec_symb)[0]
+
+                print(i,'/',len(titles),' - Downloading Audio ',filename_base,'...',sep='')
+
+                download_music(link,filename_base.replace(' ','_'),download_path,convert_to_mp3=convert,rename=rename)
+
+                disable_downloaded.append(True)
+
+            except:
+
+                disable_downloaded.append(False)
+
+                print('Failed downloading')
+
         i += 1
 
-    # ------------------------Updating titles.txt disabling downloaded music---------------
+    # ------------------------Updating titles.txt: disabling downloaded music--------------- #
     titles_file = open('titles.txt','w')    
 
-    for title in titles_new:
+    for i,title in enumerate(titles_new):
 
-        titles_file.write(('-' + title if title[0] != '-' else title)+'\n')
+        if disable_found and disable_downloaded:
+            titles_file.write(('-' + title if title[0] != '-' else title) + '\n')
+        else:
+            titles_file.write(title + '\n')
         
         
