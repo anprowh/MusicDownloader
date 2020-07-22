@@ -4,7 +4,9 @@ import requests
 from pytube import YouTube
 from ffmpeg.video import separate_audio
 import os
+from youtubesearchpython import SearchVideos
 import patch
+
 
 
 class YTAudioDownloader:
@@ -72,13 +74,13 @@ class YTAudioDownloader:
         
         return self.filename
         
-    def get_yt_link(self,nvids=1,max_zero_results=10,verbose=1):
+    def get_yt_link(self,n_videos=1,max_zero_results=10,verbose=1):
         '''
             Searches YouTube to get link to the video with needed audio
             and updates link and yt_name.
 
             Args:
-            nvids (int): 
+            n_videos (int): 
                 Number of videos to choose from. 
                 If set to 1 then video is chosen automatically.
             
@@ -95,7 +97,6 @@ class YTAudioDownloader:
             
 
         '''
-
         base_search = 'https://www.youtube.com/results?search_query='
         args_search = '&sp=EgIQAQ%253D%253D'
         base = 'https://www.youtube.com'
@@ -108,58 +109,33 @@ class YTAudioDownloader:
         if verbose:
             print('Searching...   ',end='')
 
-        while len(vids)==0:
-            # getting search results
-            search = requests.get(
-                base_search+self.title.replace(' ','+')+args_search
-                ).text
-            soup = BeautifulSoup(search,features='html.parser').findAll('a')
-
-            vids = []
-            for link in soup:                                                    # appropriate results
-                if 'href' in link.attrs:
-                    if str(link['href'])[:7] == '/watch?':
-                        vids.append([link['href'],link.text])
-
-            if len(vids)==0:                                                     # if no results then try again
-                cur_zero_results += 1
-                if verbose==2:
-                    print('Failed\nSearching again...   ',end='')
-                if cur_zero_results == max_zero_results:
-                    if verbose:
-                        print('Failed')
-                    return None
-
-                continue
-
-        if verbose:
-            print()
-            print('Found')
         
-        # getting rid of duplicates
-        vids = [x for x in vids if x[1][0]!='\n']
+        search = SearchVideos(self.title, offset = 1, mode = "json", max_results = n_videos)
+
+        vids = eval(search.result())
+        vids = [(x['link'],x['title']) for x in vids['search_result']]
+        print(vids)
 
         # choosing prefered video
         i=0
-        if nvids == 1:
+        if n_videos == 1:
             link = vids[i][0]
         else:
-            for pair in vids[:nvids]:
+            for pair in vids[:n_videos]:
                 print(i,pair[1])
                 i+=1
             i = int(input('Choose Audio to download: '))
             link = vids[i][0]
 
         # Updating object info
-        self.link = base + link
+        self.link = link
         self.yt_name = vids[i][1]
 
         if self.filename == 'yt':
             self.filename = self.yt_name
         if self.slugify:
             self.slugify_filename()
-
-        return base+link,vids[i][1]
+        return link,vids[i][1]
 
     def download_audio(self,download_path,max_download_attempts=5,convert_to_mp3=False,rename=True,verbose=1): 
         '''
@@ -268,118 +244,145 @@ class YTAudioDownloader:
 
         return True
 
-    
-if __name__=='__main__':
-    
-    spec_symb = ' -> ' # name - link separator for titles.txt
 
-    download_path = os.path.join(os.path.abspath(os.path.curdir),'Music')
-    print('Will be downloaded to',download_path)
+#===================M====M========A========IIII=====NN====N==========================#
+#===================MM==MM=======A=A========II======N=N===N==========================#
+#===================M=MM=M======A===A=======II======N==N==N==========================#
+#===================M====M=====AAAAAAA======II======N===N=N==========================#
+#===================M====M=====A=====A=====IIII=====N====NN==========================#
 
-    nvids = 1     # Number of videos to choose from
-    max_zero_results = 10   # Max number of searching tries
-    max_download_attempts = 5
+class MainProg:
 
-    convert = False     # Converting using ffmpeg
-    rename = True   # File is originally downloaded with .mp4 extension. Setting to true leads to renameing .mp4 to .mp3
-    chooseAgain = False     # If there is link in titles.txt and it is set to False then no search will be done
+    def __init__(
+        self,
+        spec_symb = ' -> ',
+        titles_filename = 'titles.txt',
+        download_path=os.path.join(os.path.abspath(os.path.curdir),'Music'),
+        n_videos=1,
+        max_zero_results=10,
+        max_download_attempts=5,
+        convert=False,
+        rename=True,
+        choose_again=False,
+        verbose=True):
 
-    titles_file = open('titles.txt','r')
-    titles_full = [x.replace('\n','') for x in titles_file.readlines()]
-    titles =  [x for x in titles_full if x[0]!='-']
-    downloaders = []
+        self.spec_symb = spec_symb # name - link separator for titles.txt
 
-    i = 1
-    n = 0
+        self.convert = convert     # Converting using ffmpeg
+        self.rename = rename   # File is originally downloaded with .mp4 extension. Setting to true leads to renameing .mp4 to .mp3
+        self.choose_again = choose_again     # If there is link in titles.txt and it is set to False then no search will be done
+        self.verbose = verbose
+
+        self.titles_filename = titles_filename
+        self.download_path = download_path
+        if self.verbose:
+            print('Audio will be downloaded to',download_path)
+
+        self.n_videos = n_videos     # Number of videos to choose from
+        self.max_zero_results = max_zero_results   # Max number of searching tries
+        self.max_download_attempts = max_download_attempts
+        self.downloaders = []
 
 
-    # -----------------------------------Getting links--------------------------------- #
-    for search_request in titles_full:
+    def get_links(self):
 
-        # Skipping disabled titles
-        if search_request[0] == '-':    
-            downloaders.append(search_request)
-            continue
+        titles_file = open(os.path.join(self.download_path,self.titles_filename),'r')
+        titles_full = [x.replace('\n','') for x in titles_file.readlines()]
+        titles =  [x for x in titles_full if x[0]!='-']
 
-        
+        i = 1
+        n = 0
 
-        print(i,'/',len(titles),' - Choosing YouTube link for ',search_request.split(spec_symb),'...',sep='')
+        for search_request in titles_full:
 
-        if search_request.count(spec_symb)==1 and not chooseAgain:   # Skipping search where link is available
+            # Skipping disabled titles
+            if search_request[0] == '-':    
+                self.downloaders.append(search_request)
+                continue
 
-            title,link = search_request.split(spec_symb)
-
-            downloaders.append(YTAudioDownloader(title,link))
-
-            n+=1
-
-            print('Link already exists')
-
-        else:
-
-            title = search_request
-
-            downloaders.append(YTAudioDownloader(title))
             
+            if self.verbose:
+                print(i,'/',len(titles),' - Choosing YouTube link for ',search_request.split(self.spec_symb)[0],'...',sep='')
+
+            if search_request.count(self.spec_symb)==1 and not self.choose_again:   # Skipping search where link is available
+
+                title,link = search_request.split(self.spec_symb)
+
+                self.downloaders.append(YTAudioDownloader(title,link))
+
+                n+=1
+                if self.verbose:
+                    print('Link already exists')
+
+            else:
+
+                title = search_request
+
+                self.downloaders.append(YTAudioDownloader(title))
+                
+                try:
+                    self.downloaders[-1].get_yt_link(n_videos=self.n_videos,max_zero_results=self.max_zero_results,verbose=self.verbose)
+                    n += 1
+
+                except:
+                    if self.verbose:
+                        print('Search Failed')
+            
+            i += 1
+        titles_file.close()
+
+
+    def save(self):                  
+        titles_file = open(os.path.join(self.download_path,self.titles_filename),'w')
+
+        for unit in self.downloaders:
+            if isinstance(unit,str):
+                titles_file.write(unit + '\n')
+            else:
+                if unit.success:
+                    titles_file.write('-'+unit.title+self.spec_symb+unit.link+'\n')
+                else:
+                    if unit.link is None:
+                        titles_file.write(unit.title+'\n')
+                    else: 
+                        titles_file.write(unit.title+self.spec_symb+unit.link+'\n')
+
+        titles_file.close()
+        if self.verbose:
+            print()
+
+    
+    def download(self):
+
+        i = 1
+        n = len([1 for x in self.downloaders if not isinstance(x,str)])
+        
+        for unit in self.downloaders:
+            if isinstance(unit,str):
+                continue
+
             try:
-                downloaders[-1].get_yt_link()
-                n += 1
+                if self.verbose:
+                    print(i,'/',n,' - Downloading Audio ',unit.title,'...',sep='')
+                unit.download_audio(self.download_path,convert_to_mp3=self.convert,rename=self.rename)
 
             except:
-                
-                print('Search Failed')
-        
-        i += 1
 
-    # ------------------------Updating titles.txt: adding links-------------------------- #
-    titles_file.close()                     
-    titles_file = open('titles.txt','w')
+                if self.verbose:
+                    print('Failed downloading')
 
-    for unit in downloaders:
-        if isinstance(unit,str):
-            titles_file.write(unit + '\n')
-        else:
-            titles_file.write(unit.title+spec_symb+unit.link+'\n')
+            i += 1
 
-    titles_file.close()
+    def run(self):
+
+        self.get_links()
+        self.save()
+        self.download()
+        self.save()
 
 
-    print()
-
-    i = 1
-    # ---------------------------------Downloading files----------------------------------- #
-    for unit in downloaders:
-        if isinstance(unit,str):
-            continue
-
-        try:
-
-            print(i,'/',n,' - Downloading Audio ',unit.title,'...',sep='')
-
-            unit.download_audio(download_path,convert_to_mp3=convert,rename=rename)
-
-        except:
-
-            print('Failed downloading')
-
-        i += 1
-
-    # ------------------------Updating titles.txt: disabling downloaded music--------------- #
-    titles_file = open('titles.txt','w')    
-
-    for unit in downloaders:
-
-        if isinstance(unit,str):
-            titles_file.write(unit+'\n')
-        else:
-            if unit.success:
-                titles_file.write('-'+unit.title+spec_symb+unit.link+'\n')
-            else:
-                if unit.link is None:
-                    titles_file.write(unit.title+'\n')
-                else: 
-                    titles_file.write(unit.title+spec_symb+unit.link+'\n')
-
-                
-        
-        
+if __name__ == '__main__':
+    folders = ['./Music','./Imagine_Dragons']
+    mainObj = MainProg(verbose=2,max_zero_results=5,download_path=folders[1])
+    mainObj.run()
+       
